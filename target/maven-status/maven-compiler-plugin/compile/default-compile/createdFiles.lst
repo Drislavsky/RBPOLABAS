@@ -1,7 +1,10 @@
+com\example\demo\controller\HelloController.class
 com\example\autoservice\repository\PartRepository.class
+com\example\demo\DemoApplication.class
 com\example\autoservice\repository\CustomerRepository.class
 com\example\autoservice\controller\CustomerController.class
 com\example\autoservice\model\Vehicle.class
+com\example\autoservice\controller\PartController$PartRestockRequest.class
 com\example\autoservice\repository\ServiceOrderRepository.class
 com\example\autoservice\AutoServiceApplication.class
 com\example\autoservice\model\Customer.class
