@@ -13,10 +13,10 @@ public class Part {
     private String name;
 
     @Column(name = "price", nullable = false)
-    private Double price;
+    private double price; // примитивный тип, не может быть null
 
     @Column(name = "stock", nullable = false)
-    private Integer stock;
+    private int stock; // примитивный тип
 
     @Column(name = "description", length = 500)
     private String description;
@@ -31,12 +31,12 @@ public class Part {
     private String partNumber;
 
     @Column(name = "is_available", nullable = false)
-    private Boolean isAvailable = true;
+    private boolean isAvailable = true;
 
     public Part() {
     }
 
-    public Part(String name, Double price, Integer stock, String category) {
+    public Part(String name, double price, int stock, String category) {
         this.name = name;
         this.price = price;
         this.stock = stock;
@@ -44,7 +44,7 @@ public class Part {
         this.isAvailable = stock > 0;
     }
 
-    public Part(String name, Double price, Integer stock, String description, String category, String manufacturer, String partNumber) {
+    public Part(String name, double price, int stock, String description, String category, String manufacturer, String partNumber) {
         this.name = name;
         this.price = price;
         this.stock = stock;
@@ -71,19 +71,19 @@ public class Part {
         this.name = name;
     }
 
-    public Double getPrice() {
+    public double getPrice() {
         return price;
     }
 
-    public void setPrice(Double price) {
+    public void setPrice(double price) {
         this.price = price;
     }
 
-    public Integer getStock() {
+    public int getStock() {
         return stock;
     }
 
-    public void setStock(Integer stock) {
+    public void setStock(int stock) {
         this.stock = stock;
         // Automatically update availability based on stock
         this.isAvailable = stock > 0;
@@ -121,16 +121,16 @@ public class Part {
         this.partNumber = partNumber;
     }
 
-    public Boolean getIsAvailable() {
+    public boolean getIsAvailable() {
         return isAvailable;
     }
 
-    public void setIsAvailable(Boolean isAvailable) {
+    public void setIsAvailable(boolean isAvailable) {
         this.isAvailable = isAvailable;
     }
 
     // Business logic methods
-    public void decreaseStock(Integer quantity) {
+    public void decreaseStock(int quantity) {
         if (quantity <= 0) {
             throw new IllegalArgumentException("Quantity must be positive");
         }
@@ -141,7 +141,7 @@ public class Part {
         this.isAvailable = this.stock > 0;
     }
 
-    public void increaseStock(Integer quantity) {
+    public void increaseStock(int quantity) {
         if (quantity <= 0) {
             throw new IllegalArgumentException("Quantity must be positive");
         }
@@ -153,7 +153,7 @@ public class Part {
         return stock > 0;
     }
 
-    public Double getTotalValue() {
+    public double getTotalValue() {
         return price * stock;
     }
 
@@ -181,7 +181,6 @@ public class Part {
 
         if (!id.equals(part.id)) return false;
         if (!name.equals(part.name)) return false;
-        if (!price.equals(part.price)) return false;
         return partNumber != null ? partNumber.equals(part.partNumber) : part.partNumber == null;
     }
 
@@ -189,7 +188,6 @@ public class Part {
     public int hashCode() {
         int result = id.hashCode();
         result = 31 * result + name.hashCode();
-        result = 31 * result + price.hashCode();
         result = 31 * result + (partNumber != null ? partNumber.hashCode() : 0);
         return result;
     }

@@ -11,7 +11,6 @@ com\example\autoservice\model\ServiceOrder.class
 com\example\autoservice\controller\VehicleController.class
 com\example\autoservice\controller\ServiceOrderController.class
 com\example\autoservice\service\UserService.class
-com\example\autoservice\dto\RegistrationRequest.class
 com\example\demo\controller\HelloController.class
 com\example\autoservice\repository\CustomerRepository.class
 com\example\autoservice\controller\AuthController.class
@@ -20,6 +19,8 @@ com\example\autoservice\repository\ServiceOrderRepository.class
 com\example\autoservice\AutoServiceApplication.class
 com\example\autoservice\controller\MechanicController.class
 com\example\autoservice\config\SecurityConfig.class
+com\example\autoservice\controller\RegistrationRequest.class
 com\example\autoservice\repository\VehicleRepository.class
 com\example\autoservice\model\Mechanic.class
 com\example\autoservice\controller\PartController.class
+com\example\autoservice\controller\UserController.class

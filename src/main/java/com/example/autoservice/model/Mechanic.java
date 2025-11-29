@@ -12,6 +12,10 @@ public class Mechanic {
     private String name;
     private String specialization;
 
+    @OneToOne
+    @JoinColumn(name = "user_id")
+    private User user;
+
     public Mechanic() {}
 
     public Long getId() { return id; }
@@ -22,4 +26,7 @@ public class Mechanic {
 
     public String getSpecialization() { return specialization; }
     public void setSpecialization(String specialization) { this.specialization = specialization; }
+
+    public User getUser() { return user; }
+    public void setUser(User user) { this.user = user; }
 }

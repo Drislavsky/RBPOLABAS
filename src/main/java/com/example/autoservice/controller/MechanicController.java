@@ -3,6 +3,7 @@ package com.example.autoservice.controller;
 import com.example.autoservice.model.Mechanic;
 import com.example.autoservice.repository.MechanicRepository;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -39,7 +40,9 @@ public class MechanicController {
         }).orElseGet(() -> ResponseEntity.notFound().build());
     }
 
+    // ДОБАВЬ ЭТОТ МЕТОД ДЛЯ УДАЛЕНИЯ МЕХАНИКА
     @DeleteMapping("/{id}")
+    @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<Void> delete(@PathVariable Long id) {
         if (!repo.existsById(id)) return ResponseEntity.notFound().build();
         repo.deleteById(id);
