@@ -7,6 +7,7 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.Optional;
 
 @RestController
 @RequestMapping("/api/users")
@@ -24,7 +25,25 @@ public class UserController {
         return userRepository.findAll();
     }
 
-    // ДОБАВЬ ЭТОТ МЕТОД ДЛЯ УДАЛЕНИЯ
+    @PutMapping("/{id}")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<User> updateUser(@PathVariable Long id, @RequestBody User updated) {
+        Optional<User> userOpt = userRepository.findById(id);
+        if (userOpt.isEmpty()) {
+            return ResponseEntity.notFound().build();
+        }
+
+        User user = userOpt.get();
+        user.setUsername(updated.getUsername());
+        user.setRole(updated.getRole());
+        user.setEnabled(updated.isEnabled());
+
+
+
+        User saved = userRepository.save(user);
+        return ResponseEntity.ok(saved);
+    }
+
     @DeleteMapping("/{id}")
     @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<Void> deleteUser(@PathVariable Long id) {

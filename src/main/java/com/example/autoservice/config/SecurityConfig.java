@@ -65,9 +65,9 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST, "/api/vehicles/**").hasAnyRole("ADMIN", "CUSTOMER", "MECHANIC")
                         .requestMatchers(HttpMethod.POST, "/api/mechanics/**").hasAnyRole("ADMIN", "MECHANIC")
 
-                        // PUT/DELETE - только админ (редактирование и удаление основных сущностей)
+                        // PUT/DELETE - (редактирование и удаление основных сущностей)
                         .requestMatchers(HttpMethod.PUT, "/api/customers/**").hasRole("ADMIN")
-                        .requestMatchers(HttpMethod.PUT, "/api/vehicles/**").hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.PUT, "/api/vehicles/**").hasAnyRole("ADMIN", "CUSTOMER")
                         .requestMatchers(HttpMethod.PUT, "/api/mechanics/**").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.DELETE, "/api/customers/**").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.DELETE, "/api/vehicles/**").hasRole("ADMIN")
