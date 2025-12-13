@@ -4,6 +4,7 @@ import com.example.autoservice.model.*;
 import com.example.autoservice.repository.*;
 import com.example.autoservice.service.UserService;
 import org.springframework.http.ResponseEntity;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
@@ -28,16 +29,22 @@ public class AuthController {
     }
 
     @PostMapping("/register")
+    @Transactional
     public ResponseEntity<?> register(@RequestBody RegistrationRequest request) {
         try {
             if (!isValidRole(request.getRole())) {
                 return ResponseEntity.badRequest().body("Invalid role");
             }
 
-            // Валидация данных в зависимости от роли
             if ("ROLE_CUSTOMER".equals(request.getRole())) {
                 if (request.getName() == null || request.getEmail() == null || request.getPhone() == null) {
                     return ResponseEntity.badRequest().body("For CUSTOMER role: name, email and phone are required");
+                }
+                if (customerRepository.existsByEmail(request.getEmail())) {
+                    return ResponseEntity.badRequest().body("Email already exists");
+                }
+                if (customerRepository.existsByPhone(request.getPhone())) {
+                    return ResponseEntity.badRequest().body("Phone already exists");
                 }
             } else if ("ROLE_MECHANIC".equals(request.getRole())) {
                 if (request.getName() == null || request.getSpecialization() == null) {
@@ -45,35 +52,40 @@ public class AuthController {
                 }
             }
 
-            User user = userService.registerUser(
-                    request.getUsername(),
-                    request.getPassword(),
-                    request.getRole()
-            );
+            User user;
 
-            // Создаем связанную сущность с данными от админа
             if ("ROLE_CUSTOMER".equals(request.getRole())) {
-                Customer customer = new Customer();
-                customer.setName(request.getName());
-                customer.setEmail(request.getEmail());
-                customer.setPhone(request.getPhone());
-
+                // Сначала создаём Customer
+                Customer customer = new Customer(request.getName(), request.getPhone(), request.getEmail());
                 Customer savedCustomer = customerRepository.save(customer);
+
+                // Затем User и связываем
+                user = userService.registerUser(request.getUsername(), request.getPassword(), request.getRole());
                 user.setCustomer(savedCustomer);
                 userRepository.save(user);
 
             } else if ("ROLE_MECHANIC".equals(request.getRole())) {
+                // Сначала создаём User
+                user = userService.registerUser(request.getUsername(), request.getPassword(), request.getRole());
+
+                // Затем Mechanic и связываем с User
                 Mechanic mechanic = new Mechanic();
                 mechanic.setName(request.getName());
                 mechanic.setSpecialization(request.getSpecialization());
+                mechanic.setUser(user);
+                mechanicRepository.save(mechanic);
 
-                Mechanic savedMechanic = mechanicRepository.save(mechanic);
-                // Если нужно связать User с Mechanic, добавить связь в User entity
+            } else {
+                // Для ADMIN просто создаём User
+                user = userService.registerUser(request.getUsername(), request.getPassword(), request.getRole());
             }
 
             return ResponseEntity.ok("User registered successfully: " + user.getUsername());
+
         } catch (IllegalArgumentException e) {
             return ResponseEntity.badRequest().body(e.getMessage());
+        } catch (Exception e) {
+            return ResponseEntity.internalServerError().body("Registration failed: " + e.getMessage());
         }
     }
 }

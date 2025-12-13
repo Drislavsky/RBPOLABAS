@@ -16,7 +16,7 @@ public class UserService implements UserDetailsService {
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
 
-    // Упрощенная валидация: минимум 8 символов, хотя бы одна цифра и одна буква
+    //минимум 8 символов, хотя бы одна цифра и одна буква
     private static final Pattern PASSWORD_PATTERN =
             Pattern.compile("^(?=.*[0-9])(?=.*[a-zA-Z]).{8,}$");
 
