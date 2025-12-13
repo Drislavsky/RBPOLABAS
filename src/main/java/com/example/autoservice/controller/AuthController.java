@@ -1,91 +1,84 @@
 package com.example.autoservice.controller;
 
-import com.example.autoservice.model.*;
-import com.example.autoservice.repository.*;
-import com.example.autoservice.service.UserService;
+import com.example.autoservice.model.User;
+import com.example.autoservice.model.UserSession;
+import com.example.autoservice.repository.UserRepository;
+import com.example.autoservice.service.TokenService;
+import io.jsonwebtoken.JwtException;
 import org.springframework.http.ResponseEntity;
-import org.springframework.transaction.annotation.Transactional;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.bind.annotation.*;
+
+import java.util.Map;
+import java.util.Optional;
 
 @RestController
 @RequestMapping("/api/auth")
 public class AuthController {
 
-    private final UserService userService;
     private final UserRepository userRepository;
-    private final CustomerRepository customerRepository;
-    private final MechanicRepository mechanicRepository;
+    private final PasswordEncoder passwordEncoder;
+    private final TokenService tokenService;
 
-    public AuthController(UserService userService, UserRepository userRepository,
-                          CustomerRepository customerRepository, MechanicRepository mechanicRepository) {
-        this.userService = userService;
+    public AuthController(UserRepository userRepository, PasswordEncoder passwordEncoder, TokenService tokenService) {
         this.userRepository = userRepository;
-        this.customerRepository = customerRepository;
-        this.mechanicRepository = mechanicRepository;
+        this.passwordEncoder = passwordEncoder;
+        this.tokenService = tokenService;
     }
 
-    private boolean isValidRole(String role) {
-        return "ROLE_CUSTOMER".equals(role) || "ROLE_MECHANIC".equals(role) || "ROLE_ADMIN".equals(role);
+    @PostMapping("/login")
+    public ResponseEntity<?> login(@RequestBody LoginRequest request) {
+        Optional<User> userOpt = userRepository.findByUsername(request.getUsername());
+
+        if (userOpt.isEmpty() || !passwordEncoder.matches(request.getPassword(), userOpt.get().getPassword())) {
+            return ResponseEntity.status(401).body("Invalid credentials");
+        }
+
+        User user = userOpt.get();
+
+        String accessToken = tokenService.generateAccessToken(user);
+        String refreshToken = tokenService.generateRefreshToken(user);
+
+        UserSession session = tokenService.saveRefreshSession(user, refreshToken);
+
+        return ResponseEntity.ok(Map.of(
+                "accessToken", accessToken,
+                "refreshToken", refreshToken,
+                "sessionId", session.getId()
+        ));
     }
 
-    @PostMapping("/register")
-    @Transactional
-    public ResponseEntity<?> register(@RequestBody RegistrationRequest request) {
+    @PostMapping("/refresh")
+    public ResponseEntity<?> refresh(@RequestBody RefreshRequest request) {
+        String oldRefreshToken = request.getRefreshToken();
+
         try {
-            if (!isValidRole(request.getRole())) {
-                return ResponseEntity.badRequest().body("Invalid role");
+            tokenService.validateRefreshToken(oldRefreshToken);
+
+            Optional<UserSession> sessionOpt = tokenService.findSessionByRefreshToken(oldRefreshToken);
+
+            if (sessionOpt.isEmpty() || !sessionOpt.get().isValid()) {
+                return ResponseEntity.status(401).body("Invalid or expired refresh token");
             }
 
-            if ("ROLE_CUSTOMER".equals(request.getRole())) {
-                if (request.getName() == null || request.getEmail() == null || request.getPhone() == null) {
-                    return ResponseEntity.badRequest().body("For CUSTOMER role: name, email and phone are required");
-                }
-                if (customerRepository.existsByEmail(request.getEmail())) {
-                    return ResponseEntity.badRequest().body("Email already exists");
-                }
-                if (customerRepository.existsByPhone(request.getPhone())) {
-                    return ResponseEntity.badRequest().body("Phone already exists");
-                }
-            } else if ("ROLE_MECHANIC".equals(request.getRole())) {
-                if (request.getName() == null || request.getSpecialization() == null) {
-                    return ResponseEntity.badRequest().body("For MECHANIC role: name and specialization are required");
-                }
-            }
+            UserSession session = sessionOpt.get();
+            tokenService.revokeSession(session);
 
-            User user;
+            User user = session.getUser();
 
-            if ("ROLE_CUSTOMER".equals(request.getRole())) {
-                // Сначала создаём Customer
-                Customer customer = new Customer(request.getName(), request.getPhone(), request.getEmail());
-                Customer savedCustomer = customerRepository.save(customer);
+            String newAccessToken = tokenService.generateAccessToken(user);
+            String newRefreshToken = tokenService.generateRefreshToken(user);
 
-                // Затем User и связываем
-                user = userService.registerUser(request.getUsername(), request.getPassword(), request.getRole());
-                user.setCustomer(savedCustomer);
-                userRepository.save(user);
+            UserSession newSession = tokenService.saveRefreshSession(user, newRefreshToken);
 
-            } else if ("ROLE_MECHANIC".equals(request.getRole())) {
-                // Сначала создаём User
-                user = userService.registerUser(request.getUsername(), request.getPassword(), request.getRole());
+            return ResponseEntity.ok(Map.of(
+                    "accessToken", newAccessToken,
+                    "refreshToken", newRefreshToken,
+                    "sessionId", newSession.getId()
+            ));
 
-                // Затем Mechanic и связываем с User
-                Mechanic mechanic = new Mechanic();
-                mechanic.setName(request.getName());
-                mechanic.setSpecialization(request.getSpecialization());
-                mechanic.setUser(user);
-                mechanicRepository.save(mechanic);
-
-            } else {
-                // Для ADMIN просто создаём User
-                user = userService.registerUser(request.getUsername(), request.getPassword(), request.getRole());
-            }
-
-            return ResponseEntity.ok("User registered successfully: " + user.getUsername());
-
-        } catch (IllegalArgumentException e) {
-            return ResponseEntity.badRequest().body(e.getMessage());
-        } catch (Exception e) {
-            return ResponseEntity.internalServerError().body("Registration failed: " + e.getMessage());
+        } catch (JwtException e) {
+            return ResponseEntity.status(401).body("Invalid refresh token");
         }
     }
 }
