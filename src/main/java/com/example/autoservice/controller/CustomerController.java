@@ -1,7 +1,9 @@
 package com.example.autoservice.controller;
 
 import com.example.autoservice.model.Customer;
+import com.example.autoservice.model.ServiceOrder;
 import com.example.autoservice.repository.CustomerRepository;
+import com.example.autoservice.repository.ServiceOrderRepository;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -12,9 +14,11 @@ import java.util.List;
 public class CustomerController {
 
     private final CustomerRepository repo;
+    private final ServiceOrderRepository serviceOrderRepository;
 
-    public CustomerController(CustomerRepository repo) {
+    public CustomerController(CustomerRepository repo, ServiceOrderRepository serviceOrderRepository) {
         this.repo = repo;
+        this.serviceOrderRepository = serviceOrderRepository;
     }
 
     @GetMapping
@@ -49,5 +53,22 @@ public class CustomerController {
         if (!repo.existsById(id)) return ResponseEntity.notFound().build();
         repo.deleteById(id);
         return ResponseEntity.noContent().build();
+    }
+
+    // Бизнес-операция: Получение общей суммы трат клиента (LTV)
+    @GetMapping("/{id}/total-spent")
+    public ResponseEntity<Double> getCustomerTotalSpent(@PathVariable Long id) {
+        if (!repo.existsById(id)) {
+            return ResponseEntity.notFound().build();
+        }
+
+        List<ServiceOrder> orders = serviceOrderRepository.findByCustomerId(id);
+
+        double totalSpent = orders.stream()
+                .filter(ServiceOrder::isCompleted) // Учитываем только завершенные заказы
+                .mapToDouble(ServiceOrder::getTotalCost)
+                .sum();
+
+        return ResponseEntity.ok(totalSpent);
     }
 }
