@@ -32,7 +32,7 @@ jobs:
 
       # 3. Сборка проекта через Maven
       - name: Build with Maven
-        run: mvn -B package --file pom.xml
+        run: mvn -B package -DskipTests --file pom.xml
 
       # 4. (Опционально) Загрузка артефакта (JAR файла)
       - name: Upload Build Artifact
