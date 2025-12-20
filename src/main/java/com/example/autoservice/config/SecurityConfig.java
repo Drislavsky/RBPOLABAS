@@ -14,7 +14,7 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 
 @Configuration
 @EnableWebSecurity
-@EnableMethodSecurity
+@EnableMethodSecurity(prePostEnabled = true)
 public class SecurityConfig {
 
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
@@ -26,57 +26,58 @@ public class SecurityConfig {
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http
-                // Отключаем CSRF — не нужен для stateless JWT API
                 .csrf(csrf -> csrf.disable())
-
-                // Отключаем Basic Auth — мы используем только JWT в Bearer
                 .httpBasic(httpBasic -> httpBasic.disable())
-
-                // Stateless — не создаём сессии на сервере
                 .sessionManagement(session -> session
-                        .sessionCreationPolicy(SessionCreationPolicy.STATELESS))
-
-                // Добавляем наш JWT-фильтр ПЕРЕД стандартным фильтром аутентификации
+                        .sessionCreationPolicy(SessionCreationPolicy.STATELESS)
+                )
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
+                .authorizeHttpRequests(auth -> auth
+                        // 1. ОТКРЫТЫЕ ЭНДПОИНТЫ
+                        .requestMatchers("/api/auth/**").permitAll()
 
-                // Правила доступа
-                .authorizeHttpRequests(authz -> authz
-                        // Открытые эндпоинты для аутентификации
-                        .requestMatchers("/api/auth/login").permitAll()
-                        .requestMatchers("/api/auth/refresh").permitAll()
-                        .requestMatchers("/api/auth/register").hasRole("ADMIN")
+                        // 2. ЗАПЧАСТИ (PartController)
+                        .requestMatchers(HttpMethod.GET, "/api/parts/restock-calculation").hasAnyAuthority("ROLE_ADMIN", "ROLE_MECHANIC")
+                        .requestMatchers(HttpMethod.GET, "/api/parts/**").authenticated()
+                        .requestMatchers(HttpMethod.POST, "/api/parts/**").hasAuthority("ROLE_ADMIN")
+                        .requestMatchers(HttpMethod.PUT, "/api/parts/**").hasAnyAuthority("ROLE_ADMIN", "ROLE_MECHANIC")
+                        .requestMatchers(HttpMethod.DELETE, "/api/parts/**").hasAuthority("ROLE_ADMIN")
 
-                        // Пользователи — только админ
-                        .requestMatchers("/api/users/**").hasRole("ADMIN")
+                        // 3. КЛИЕНТЫ (CustomerController)
+                        .requestMatchers(HttpMethod.GET, "/api/customers/*/total-spent").hasAuthority("ROLE_ADMIN")
+                        .requestMatchers(HttpMethod.GET, "/api/customers/**").hasAnyAuthority("ROLE_ADMIN", "ROLE_MECHANIC")
+                        .requestMatchers(HttpMethod.POST, "/api/customers/**").hasAuthority("ROLE_ADMIN")
+                        .requestMatchers(HttpMethod.PUT, "/api/customers/**").hasAnyAuthority("ROLE_ADMIN", "ROLE_CUSTOMER")
+                        .requestMatchers(HttpMethod.DELETE, "/api/customers/**").hasAuthority("ROLE_ADMIN")
 
-                        // Заказы
-                        .requestMatchers(HttpMethod.POST, "/api/orders/**").hasAnyRole("ADMIN", "CUSTOMER", "MECHANIC")
-                        .requestMatchers(HttpMethod.GET, "/api/orders/customer/**").hasAnyRole("ADMIN", "CUSTOMER")
-                        .requestMatchers(HttpMethod.GET, "/api/orders/**").hasAnyRole("ADMIN", "MECHANIC")
-                        .requestMatchers(HttpMethod.DELETE, "/api/orders/**").hasAnyRole("ADMIN", "MECHANIC")
+                        // 4. ЗАКАЗЫ (ServiceOrderController)
+                        // Специфичные операции ставим ВЫШЕ общих
+                        .requestMatchers(HttpMethod.GET, "/api/orders/*/progress").hasAnyAuthority("ROLE_ADMIN", "ROLE_MECHANIC", "ROLE_CUSTOMER")
+                        .requestMatchers(HttpMethod.PUT, "/api/orders/*/complete").hasAnyAuthority("ROLE_ADMIN", "ROLE_MECHANIC")
+                        .requestMatchers(HttpMethod.PUT, "/api/orders/*/cancel").hasAnyAuthority("ROLE_ADMIN", "ROLE_CUSTOMER", "ROLE_MECHANIC")
+                        // Общие операции с заказами
+                        .requestMatchers(HttpMethod.GET, "/api/orders/**").hasAnyAuthority("ROLE_ADMIN", "ROLE_MECHANIC", "ROLE_CUSTOMER")
+                        .requestMatchers(HttpMethod.POST, "/api/orders/**").hasAnyAuthority("ROLE_ADMIN", "ROLE_MECHANIC")
+                        .requestMatchers(HttpMethod.PUT, "/api/orders/**").hasAnyAuthority("ROLE_ADMIN", "ROLE_MECHANIC")
+                        .requestMatchers(HttpMethod.DELETE, "/api/orders/**").hasAuthority("ROLE_ADMIN")
 
-                        // Детали (parts) — админ и механик
-                        .requestMatchers("/api/parts/**").hasAnyRole("ADMIN", "MECHANIC")
+                        // 5. ТРАНСПОРТ (VehicleController)
+                        .requestMatchers(HttpMethod.POST, "/api/vehicles/*/transfer-ownership").hasAnyAuthority("ROLE_ADMIN", "ROLE_CUSTOMER")
+                        .requestMatchers(HttpMethod.POST, "/api/vehicles/**").hasAnyAuthority("ROLE_ADMIN", "ROLE_CUSTOMER", "ROLE_MECHANIC")
+                        .requestMatchers(HttpMethod.PUT, "/api/vehicles/**").hasAnyAuthority("ROLE_ADMIN", "ROLE_CUSTOMER")
+                        .requestMatchers(HttpMethod.DELETE, "/api/vehicles/**").hasAuthority("ROLE_ADMIN")
+                        .requestMatchers(HttpMethod.GET, "/api/vehicles/**").hasAnyAuthority("ROLE_ADMIN", "ROLE_MECHANIC", "ROLE_CUSTOMER")
 
-                        // Клиенты, машины, механики — просмотр админ и механик
-                        .requestMatchers(HttpMethod.GET, "/api/customers/**").hasAnyRole("ADMIN", "MECHANIC")
-                        .requestMatchers(HttpMethod.GET, "/api/vehicles/**").hasAnyRole("ADMIN", "MECHANIC")
-                        .requestMatchers(HttpMethod.GET, "/api/mechanics/**").hasAnyRole("ADMIN", "MECHANIC")
+                        // 6. МЕХАНИКИ (MechanicController)
+                        .requestMatchers(HttpMethod.GET, "/api/mechanics/*/workload").hasAnyAuthority("ROLE_ADMIN", "ROLE_CUSTOMER", "ROLE_MECHANIC")
+                        .requestMatchers(HttpMethod.GET, "/api/mechanics/**").hasAnyAuthority("ROLE_ADMIN", "ROLE_MECHANIC")
+                        .requestMatchers(HttpMethod.POST, "/api/mechanics/**").hasAuthority("ROLE_ADMIN")
+                        .requestMatchers(HttpMethod.PUT, "/api/mechanics/**").hasAuthority("ROLE_ADMIN")
+                        .requestMatchers(HttpMethod.DELETE, "/api/mechanics/**").hasAuthority("ROLE_ADMIN")
 
-                        // Создание сущностей
-                        .requestMatchers(HttpMethod.POST, "/api/customers/**").hasAnyRole("ADMIN", "CUSTOMER")
-                        .requestMatchers(HttpMethod.POST, "/api/vehicles/**").hasAnyRole("ADMIN", "CUSTOMER", "MECHANIC")
-                        .requestMatchers(HttpMethod.POST, "/api/mechanics/**").hasAnyRole("ADMIN", "MECHANIC")
+                        // 7. ПОЛЬЗОВАТЕЛИ
+                        .requestMatchers("/api/users/**").hasAuthority("ROLE_ADMIN")
 
-                        // Редактирование и удаление
-                        .requestMatchers(HttpMethod.PUT, "/api/customers/**").hasRole("ADMIN")
-                        .requestMatchers(HttpMethod.PUT, "/api/vehicles/**").hasAnyRole("ADMIN", "CUSTOMER")
-                        .requestMatchers(HttpMethod.PUT, "/api/mechanics/**").hasRole("ADMIN")
-                        .requestMatchers(HttpMethod.DELETE, "/api/customers/**").hasRole("ADMIN")
-                        .requestMatchers(HttpMethod.DELETE, "/api/vehicles/**").hasRole("ADMIN")
-                        .requestMatchers(HttpMethod.DELETE, "/api/mechanics/**").hasRole("ADMIN")
-
-                        // Всё остальное — требует аутентификации по JWT
                         .anyRequest().authenticated()
                 );
 

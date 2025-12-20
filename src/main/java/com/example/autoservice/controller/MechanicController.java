@@ -71,7 +71,7 @@ public class MechanicController {
         return ResponseEntity.ok(Map.of(
                 "mechanicId", id,
                 "activeOrders", activeOrdersCount,
-                "status", activeOrdersCount > 2 ? "BUSY" : "AVAILABLE"
+                "status", activeOrdersCount >= 1 ? "BUSY" : "AVAILABLE"
         ));
     }
 }

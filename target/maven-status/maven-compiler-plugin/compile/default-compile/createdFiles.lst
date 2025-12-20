@@ -1,5 +1,4 @@
 com\example\autoservice\repository\PartRepository.class
-com\example\demo\DemoApplication.class
 com\example\autoservice\config\JwtAuthenticationFilter.class
 com\example\autoservice\controller\CustomerController.class
 com\example\autoservice\model\Vehicle.class
@@ -15,7 +14,6 @@ com\example\autoservice\controller\LoginRequest.class
 com\example\autoservice\controller\ServiceOrderController.class
 com\example\autoservice\service\UserService.class
 com\example\autoservice\model\SessionStatus.class
-com\example\demo\controller\HelloController.class
 com\example\autoservice\repository\CustomerRepository.class
 com\example\autoservice\controller\RefreshRequest.class
 com\example\autoservice\controller\AuthController.class

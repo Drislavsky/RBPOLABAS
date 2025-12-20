@@ -42,24 +42,31 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
             String username = claims.getSubject();
             String role = claims.get("role", String.class);
-            Long userId = claims.get("userId", Long.class);
 
-            // Создаём UserDetails (минимально, без загрузки из БД)
-            UserDetails userDetails = org.springframework.security.core.userdetails.User
-                    .withUsername(username)
-                    .password("") // не используется
-                    .authorities(role)
-                    .build();
+            if (username != null && role != null) {
+                // ПРЕФИКС: Spring Security ожидает "ROLE_ADMIN", "ROLE_CUSTOMER" и т.д.
+                // Если в токене роль "CUSTOMER", превращаем её в "ROLE_CUSTOMER"
+                String authority = role.startsWith("ROLE_") ? role : "ROLE_" + role;
 
-            UsernamePasswordAuthenticationToken authToken =
-                    new UsernamePasswordAuthenticationToken(userDetails, null, userDetails.getAuthorities());
-            authToken.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
+                UserDetails userDetails = org.springframework.security.core.userdetails.User
+                        .withUsername(username)
+                        .password("")
+                        .authorities(authority) // Передаем исправленную роль
+                        .build();
 
-            SecurityContextHolder.getContext().setAuthentication(authToken);
+                UsernamePasswordAuthenticationToken authToken =
+                        new UsernamePasswordAuthenticationToken(
+                                userDetails,
+                                null,
+                                userDetails.getAuthorities()
+                        );
+
+                authToken.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
+                SecurityContextHolder.getContext().setAuthentication(authToken);
+            }
 
         } catch (Exception e) {
-            // Токен невалидный — продолжаем как аноним
-            logger.warn("Invalid JWT token: " + e.getMessage());
+            logger.warn("JWT Authentication failed: " + e.getMessage());
         }
 
         filterChain.doFilter(request, response);

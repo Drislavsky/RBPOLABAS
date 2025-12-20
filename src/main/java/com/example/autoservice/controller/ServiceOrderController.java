@@ -4,12 +4,15 @@ import com.example.autoservice.model.Part;
 import com.example.autoservice.model.ServiceOrder;
 import com.example.autoservice.repository.PartRepository;
 import com.example.autoservice.repository.ServiceOrderRepository;
+import com.example.autoservice.repository.CustomerRepository;
+import com.example.autoservice.repository.VehicleRepository;
+import com.example.autoservice.repository.MechanicRepository;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.*;
-import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/api/orders")
@@ -17,173 +20,128 @@ public class ServiceOrderController {
 
     private final ServiceOrderRepository repository;
     private final PartRepository partRepository;
+    private final CustomerRepository customerRepository;
+    private final VehicleRepository vehicleRepository;
+    private final MechanicRepository mechanicRepository;
 
-    public ServiceOrderController(ServiceOrderRepository repository, PartRepository partRepository) {
+    public ServiceOrderController(ServiceOrderRepository repository,
+                                  PartRepository partRepository,
+                                  CustomerRepository customerRepository,
+                                  VehicleRepository vehicleRepository,
+                                  MechanicRepository mechanicRepository) {
         this.repository = repository;
         this.partRepository = partRepository;
+        this.customerRepository = customerRepository;
+        this.vehicleRepository = vehicleRepository;
+        this.mechanicRepository = mechanicRepository;
     }
 
     @GetMapping
+    @PreAuthorize("hasAnyAuthority('ROLE_ADMIN', 'ROLE_MECHANIC')")
     public List<ServiceOrder> getAll() {
         return repository.findAll();
     }
 
     @GetMapping("/{id}")
+    @PreAuthorize("hasAnyAuthority('ROLE_ADMIN', 'ROLE_MECHANIC', 'ROLE_CUSTOMER')")
     public ResponseEntity<ServiceOrder> getById(@PathVariable Long id) {
         return repository.findById(id)
                 .map(ResponseEntity::ok)
                 .orElse(ResponseEntity.notFound().build());
     }
 
-    // Бизнес-операция: получение общей стоимости заказа
-    @GetMapping("/{orderId}/total-cost")
-    public ResponseEntity<Double> getTotalCost(@PathVariable Long orderId) {
-        return repository.findById(orderId)
-                .map(order -> ResponseEntity.ok(order.getTotalCost()))
-                .orElse(ResponseEntity.notFound().build());
-    }
-
     @PostMapping
+    @PreAuthorize("hasAnyAuthority('ROLE_ADMIN', 'ROLE_MECHANIC')")
     @Transactional
-    public ResponseEntity<ServiceOrder> create(@RequestBody ServiceOrder order) {
-        if (order.getParts() != null && !order.getParts().isEmpty()) {
-            for (Part part : order.getParts()) {
-                Part managedPart = partRepository.findById(part.getId())
-                        .orElseThrow(() -> new IllegalArgumentException("Part not found: " + part.getId()));
-                managedPart.decreaseStock(1);
-                partRepository.save(managedPart);
+    public ResponseEntity<?> create(@RequestBody ServiceOrder order) {
+        if (order.getParts() != null) {
+            for (Part p : order.getParts()) {
+                Part dbPart = partRepository.findById(p.getId())
+                        .orElseThrow(() -> new RuntimeException("Part not found: " + p.getId()));
+                if (dbPart.getStock() <= 0) {
+                    return ResponseEntity.badRequest().body("Part out of stock: " + dbPart.getName());
+                }
+                dbPart.setStock(dbPart.getStock() - 1);
+                partRepository.save(dbPart);
             }
         }
         return ResponseEntity.ok(repository.save(order));
     }
 
     @PutMapping("/{id}")
-    @Transactional
+    @PreAuthorize("hasAnyAuthority('ROLE_ADMIN', 'ROLE_MECHANIC')")
     public ResponseEntity<ServiceOrder> update(@PathVariable Long id, @RequestBody ServiceOrder updated) {
         return repository.findById(id).map(existing -> {
-            // Старые ID деталей
-            Set<Long> oldPartIds = existing.getParts() == null ?
-                    Collections.emptySet() :
-                    existing.getParts().stream()
-                            .map(Part::getId)
-                            .collect(Collectors.toSet());
-
-            // Новые ID деталей
-            Set<Long> newPartIds = updated.getParts() == null ?
-                    Collections.emptySet() :
-                    updated.getParts().stream()
-                            .map(Part::getId)
-                            .filter(Objects::nonNull)
-                            .collect(Collectors.toSet());
-
-            // Возврат на склад удалённых деталей
-            if (existing.getParts() != null) {
-                existing.getParts().stream()
-                        .filter(p -> !newPartIds.contains(p.getId()))
-                        .forEach(part -> {
-                            partRepository.findById(part.getId()).ifPresent(managed -> {
-                                managed.increaseStock(1);
-                                partRepository.save(managed);
-                            });
-                        });
-            }
-
-            // Списание новых деталей
-            if (updated.getParts() != null) {
-                updated.getParts().stream()
-                        .filter(p -> !oldPartIds.contains(p.getId()))
-                        .forEach(part -> {
-                            Part managed = partRepository.findById(part.getId())
-                                    .orElseThrow(() -> new IllegalArgumentException("Part not found: " + part.getId()));
-                            managed.decreaseStock(1);
-                            partRepository.save(managed);
-                        });
-            }
-
-            // Обновление полей заказа
-            existing.setCustomer(updated.getCustomer());
-            existing.setVehicle(updated.getVehicle());
-            existing.setMechanic(updated.getMechanic());
-            existing.setParts(updated.getParts());
-            existing.setRequiredTasks(updated.getRequiredTasks());
-            existing.setCompletedTasks(updated.getCompletedTasks());
-            existing.setLaborCost(updated.getLaborCost());
             existing.setDescription(updated.getDescription());
-            existing.setCompleted(updated.isCompleted());
-
+            existing.setLaborCost(updated.getLaborCost());
+            existing.setCompletedTasks(updated.getCompletedTasks());
+            existing.setRequiredTasks(updated.getRequiredTasks());
             return ResponseEntity.ok(repository.save(existing));
         }).orElse(ResponseEntity.notFound().build());
     }
 
+    @PutMapping("/{id}/complete")
+    @PreAuthorize("hasAnyAuthority('ROLE_ADMIN', 'ROLE_MECHANIC')")
+    public ResponseEntity<?> completeOrder(@PathVariable Long id) {
+        return repository.findById(id).map(order -> {
+            if (!order.canBeClosed()) {
+                return ResponseEntity.badRequest().body("Not all tasks are completed");
+            }
+            order.setCompleted(true);
+            repository.save(order);
+            return ResponseEntity.ok(order);
+        }).orElse(ResponseEntity.notFound().build());
+    }
+
+    // ИСПРАВЛЕНО: Путь изменен на /completion-status, чтобы совпадало с вашим запросом
+    @GetMapping("/{id}/completion-status")
+    @PreAuthorize("hasAnyAuthority('ROLE_ADMIN', 'ROLE_MECHANIC', 'ROLE_CUSTOMER')")
+    public ResponseEntity<Map<String, Object>> getOrderProgress(@PathVariable Long id) {
+        return repository.findById(id).map(order -> {
+            int total = order.getRequiredTasks() != null ? order.getRequiredTasks().size() : 0;
+            int completed = order.getCompletedTasks() != null ? order.getCompletedTasks().size() : 0;
+            double progress = total == 0 ? 0 : (double) completed / total * 100;
+
+            Map<String, Object> response = new HashMap<>();
+            response.put("orderId", id);
+            response.put("progressPercentage", progress);
+            response.put("isFullyCompleted", order.isCompleted());
+            return ResponseEntity.ok(response);
+        }).orElse(ResponseEntity.notFound().build());
+    }
+
+    @PutMapping("/{id}/cancel")
+    @PreAuthorize("hasAnyAuthority('ROLE_ADMIN', 'ROLE_CUSTOMER', 'ROLE_MECHANIC')")
+    @Transactional
+    public ResponseEntity<?> cancelOrder(@PathVariable Long id) {
+        return repository.findById(id).map(order -> {
+            if (order.isCompleted()) {
+                return ResponseEntity.badRequest().body("Cannot cancel completed order");
+            }
+            if (order.getParts() != null) {
+                for (Part p : order.getParts()) {
+                    p.setStock(p.getStock() + 1);
+                    partRepository.save(p);
+                }
+            }
+            repository.delete(order);
+            return ResponseEntity.ok().build();
+        }).orElse(ResponseEntity.notFound().build());
+    }
+
     @DeleteMapping("/{id}")
+    @PreAuthorize("hasAuthority('ROLE_ADMIN')")
     @Transactional
     public ResponseEntity<Void> delete(@PathVariable Long id) {
-        Optional<ServiceOrder> orderOpt = repository.findById(id);
-        if (orderOpt.isEmpty()) {
-            return ResponseEntity.notFound().build();
-        }
-
-        ServiceOrder order = orderOpt.get();
-
-        // Возврат всех деталей на склад
-        if (order.getParts() != null) {
-            for (Part part : order.getParts()) {
-                partRepository.findById(part.getId()).ifPresent(managed -> {
-                    managed.increaseStock(1);
-                    partRepository.save(managed);
-                });
+        return repository.findById(id).map(order -> {
+            if (order.getParts() != null) {
+                for (Part p : order.getParts()) {
+                    p.setStock(p.getStock() + 1);
+                    partRepository.save(p);
+                }
             }
-        }
-
-        repository.deleteById(id);
-        return ResponseEntity.noContent().build(); // Правильный тип: ResponseEntity<Void>
-    }
-
-    @GetMapping("/{orderId}/completion-status")
-    public ResponseEntity<String> getCompletionStatus(@PathVariable Long orderId) {
-        Optional<ServiceOrder> orderOpt = repository.findById(orderId);
-        if (orderOpt.isEmpty()) {
-            return ResponseEntity.notFound().build();
-        }
-
-        ServiceOrder order = orderOpt.get();
-        if (order.isCompleted()) {
-            return ResponseEntity.ok("COMPLETED");
-        }
-
-        int total = order.getRequiredTasks() != null ? order.getRequiredTasks().size() : 0;
-        int completed = order.getCompletedTasks() != null ? order.getCompletedTasks().size() : 0;
-        double percent = total > 0 ? (completed * 100.0) / total : 0;
-
-        return ResponseEntity.ok(String.format("IN_PROGRESS - %.1f%% complete (%d/%d tasks)", percent, completed, total));
-    }
-
-    @PutMapping("/{orderId}/cancel")
-    @Transactional
-    public ResponseEntity<ServiceOrder> cancelOrder(@PathVariable Long orderId) {
-        Optional<ServiceOrder> orderOpt = repository.findById(orderId);
-        if (orderOpt.isEmpty()) {
-            return ResponseEntity.notFound().build();
-        }
-
-        ServiceOrder order = orderOpt.get();
-        if (order.isCompleted()) {
-            return ResponseEntity.badRequest().body(order);
-        }
-
-        // Возврат всех деталей на склад
-        if (order.getParts() != null) {
-            for (Part part : order.getParts()) {
-                partRepository.findById(part.getId()).ifPresent(managed -> {
-                    managed.increaseStock(1);
-                    partRepository.save(managed);
-                });
-            }
-        }
-
-        order.getParts().clear();
-        order.setCompleted(false);
-
-        return ResponseEntity.ok(repository.save(order));
+            repository.delete(order);
+            return ResponseEntity.noContent().<Void>build();
+        }).orElse(ResponseEntity.notFound().build());
     }
 }
