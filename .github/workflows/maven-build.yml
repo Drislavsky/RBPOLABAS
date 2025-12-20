@@ -1,44 +1,42 @@
-name: Java CI with Maven and TLS Artifact
+name: Java CI with Maven
 
 on:
   push:
-    branches: [ "main", "master" ]
+    branches: [ "main" ]
   pull_request:
-    branches: [ "main", "master" ]
+    branches: [ "main" ]
 
 jobs:
   build:
     runs-on: ubuntu-latest
 
+    # Эти переменные подставляются из Settings -> Secrets вашего репозитория
+    env:
+      DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+      JWT_ACCESS_SECRET: ${{ secrets.JWT_ACCESS_SECRET }}
+      JWT_REFRESH_SECRET: ${{ secrets.JWT_REFRESH_SECRET }}
+      SSL_KEYSTORE_PASSWORD: ${{ secrets.SSL_KEYSTORE_PASSWORD }}
+
     steps:
-    # 1. Получаем код
-    - uses: actions/checkout@v4
+      # 1. Скачиваем код из репозитория
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-    # 2. Настраиваем Java (выберите вашу версию, например 17 или 21)
-    - name: Set up JDK 17
-      uses: actions/setup-java@v4
-      with:
-        java-version: '17'
-        distribution: 'temurin'
-        cache:maven: true
+      # 2. Устанавливаем JDK
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          cache: 'maven' # Исправлено: добавлен пробел и кавычки
 
-    # 3. Восстанавливаем Keystore из секретов
-    # Мы декодируем Base64 обратно в файл и кладем его в src/main/resources
-    - name: Decode Keystore
-      run: |
-        echo "${{ secrets.SSL_KEYSTORE_BASE64 }}" | base64 -d > src/main/resources/server-keystore.p12
+      # 3. Сборка проекта через Maven
+      - name: Build with Maven
+        run: mvn -B package --file pom.xml
 
-    # 4. Сборка и Тестирование
-    # Передаем пароль как переменную окружения, чтобы application.properties мог её подхватить
-    - name: Build with Maven
-      run: mvn -B package --file pom.xml
-      env:
-        SSL_KEYSTORE_PASSWORD: ${{ secrets.SSL_KEYSTORE_PASSWORD }}
-
-    # 5. Загрузка артефакта (JAR файла) в хранилище GitHub
-    - name: Upload JAR Artifact
-      uses: actions/upload-artifact@v4
-      with:
-        name: autoservice-app
-        path: target/*.jar
-        retention-days: 5
+      # 4. (Опционально) Загрузка артефакта (JAR файла)
+      - name: Upload Build Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: autoservice-app
+          path: target/*.jar
